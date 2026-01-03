@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import DashboardLayout from '@/components/layout/DashboardLayout';
-import { useAuth } from '@/contexts/AuthContext';
+import { useAuth } from '@/hooks/useAuth';
 import { useAttendance } from '@/hooks/useAttendance';
 import { useEmployees } from '@/hooks/useEmployees';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';

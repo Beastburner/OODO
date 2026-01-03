@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { useAuth } from '@/contexts/AuthContext';
+import { useAuth } from '@/hooks/useAuth';
 import { useAttendance } from '@/hooks/useAttendance';
 import { useLeave } from '@/hooks/useLeave';
 import { usePayroll } from '@/hooks/usePayroll';
