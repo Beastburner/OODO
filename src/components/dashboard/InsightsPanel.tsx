@@ -8,8 +8,13 @@ import { InsightRecord } from '@/services/insightService';
 import { useState } from 'react';
 
 export default function InsightsPanel() {
-  const { insights, stats, loading, acknowledge, triggerProcessing } = useInsights();
+  const { insights, stats, loading, tableExists, acknowledge, triggerProcessing } = useInsights();
   const [processing, setProcessing] = useState(false);
+
+  // Hide panel if table doesn't exist (migration not run)
+  if (tableExists === false) {
+    return null;
+  }
 
   const severityConfig = {
     low: {

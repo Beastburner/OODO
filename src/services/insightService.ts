@@ -138,11 +138,23 @@ export async function fetchInsights(
 
     const { data, error } = await query;
 
-    if (error) throw error;
+    if (error) {
+      // For missing table errors, create a special error that can be caught silently
+      if (error.code === '42P01' || error.message?.includes('schema cache')) {
+        const tableError: any = new Error('TABLE_MISSING');
+        tableError.code = '42P01';
+        tableError.isTableMissing = true;
+        throw tableError;
+      }
+      throw error;
+    }
 
     return (data || []) as InsightRecord[];
-  } catch (error) {
-    console.error('Error fetching insights:', error);
+  } catch (error: any) {
+    // Don't log TABLE_MISSING errors - they're handled silently by the hook
+    if (error?.message !== 'TABLE_MISSING' && error?.isTableMissing !== true) {
+      console.error('Error fetching insights:', error);
+    }
     throw error;
   }
 }
@@ -180,9 +192,21 @@ export async function getInsightStats(): Promise<{
   by_type: Record<string, number>;
 }> {
   try {
-    const { data: allInsights } = await supabase
+    const { data: allInsights, error } = await supabase
       .from('insights')
       .select('severity, insight_type, acknowledged_at');
+
+    // If table doesn't exist, return empty stats
+    if (error?.code === '42P01') {
+      return {
+        total: 0,
+        unacknowledged: 0,
+        by_severity: { low: 0, medium: 0, high: 0 },
+        by_type: {},
+      };
+    }
+
+    if (error) throw error;
 
     if (!allInsights) {
       return {
@@ -211,8 +235,9 @@ export async function getInsightStats(): Promise<{
       by_severity: bySeverity,
       by_type: byType,
     };
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error getting insight stats:', error);
+    // Return empty stats if table doesn't exist or on any error
     return {
       total: 0,
       unacknowledged: 0,

@@ -20,6 +20,7 @@ export function useInsights() {
   const { toast } = useToast();
   const [insights, setInsights] = useState<InsightRecord[]>([]);
   const [loading, setLoading] = useState(true);
+  const [tableExists, setTableExists] = useState<boolean | null>(null);
   const [stats, setStats] = useState<{
     total: number;
     unacknowledged: number;
@@ -37,13 +38,42 @@ export function useInsights() {
       setLoading(true);
       const data = await fetchInsights(50, includeAcknowledged);
       setInsights(data);
+      setTableExists(true); // Table exists if we got data
     } catch (error: any) {
+      // Track if table doesn't exist - check this FIRST before any logging
+      // Check error message, code, and custom flag
+      const errorMsg = error?.message || '';
+      const isTableMissing = error?.code === '42P01' || 
+                            error?.isTableMissing === true ||
+                            errorMsg === 'TABLE_MISSING' ||
+                            errorMsg.includes('schema cache') || 
+                            errorMsg.includes('Insights table does not exist');
+      
+      if (isTableMissing) {
+        setTableExists(false);
+        setLoading(false);
+        // Return silently - no console.error, no toast
+        return;
+      }
+      
+      // Only log and show errors for other issues (not table missing)
       console.error('Error fetching insights:', error);
+      
+      // More specific error messages for other errors
+      let errorMessage = 'Failed to fetch insights';
+      if (error?.code === '42501') {
+        // Permission denied
+        errorMessage = 'Permission denied. Admin access required.';
+      } else if (error?.message) {
+        errorMessage = error.message;
+      }
+      
       toast({
         title: 'Error',
-        description: 'Failed to fetch insights',
+        description: errorMessage,
         variant: 'destructive',
       });
+      setTableExists(true); // Table exists but there's another error
     } finally {
       setLoading(false);
     }
@@ -56,8 +86,16 @@ export function useInsights() {
     try {
       const statsData = await getInsightStats();
       setStats(statsData);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error fetching stats:', error);
+      // Track if table doesn't exist
+      if (error?.code === '42P01' || 
+          error?.isTableMissing ||
+          error?.message?.includes('schema cache') || 
+          error?.message?.includes('Insights table does not exist')) {
+        setTableExists(false);
+      }
+      // Silently fail - stats will be null
     }
   };
 
@@ -131,6 +169,7 @@ export function useInsights() {
     insights,
     stats,
     loading,
+    tableExists,
     acknowledge,
     triggerProcessing,
     refetch: fetchInsightsData,
