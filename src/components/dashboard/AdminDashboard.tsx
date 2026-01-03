@@ -4,6 +4,7 @@ import { useEmployees } from '@/hooks/useEmployees';
 import { useLeave } from '@/hooks/useLeave';
 import { useAttendance } from '@/hooks/useAttendance';
 import StatsCard from './StatsCard';
+import InsightsPanel from './InsightsPanel';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -181,6 +182,9 @@ export default function AdminDashboard() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Insights Panel */}
+      <InsightsPanel />
 
       {/* Pending Leave Requests */}
       <Card className="border-0 shadow-sm">
