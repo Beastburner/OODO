@@ -1,20 +1,21 @@
-import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import { createContext, useEffect, useState, ReactNode } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
 
 type AppRole = 'admin' | 'employee';
 
-interface AuthContextType {
+export interface AuthContextType {
   user: User | null;
   session: Session | null;
   role: AppRole | null;
   loading: boolean;
   signUp: (email: string, password: string, fullName: string, role: AppRole) => Promise<{ error: Error | null }>;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
+  signInWithGoogle: () => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
 }
 
-const AuthContext = createContext<AuthContextType | undefined>(undefined);
+export const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
@@ -24,11 +25,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (event, session) => {
+      async (event, session) => {
         setSession(session);
         setUser(session?.user ?? null);
         
         if (session?.user) {
+          // Handle OAuth sign-in - ensure profile exists
+          if (event === 'SIGNED_IN' && session.user.app_metadata?.provider === 'google') {
+            await ensureProfileExists(session.user);
+          }
+          
           setTimeout(() => {
             fetchUserRole(session.user.id);
           }, 0);
@@ -98,6 +104,78 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return { error: error as Error | null };
   };
 
+  const signInWithGoogle = async () => {
+    const redirectUrl = `${window.location.origin}/auth`;
+    
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: redirectUrl,
+        queryParams: {
+          access_type: 'offline',
+          prompt: 'consent',
+        },
+      },
+    });
+
+    return { error: error as Error | null };
+  };
+
+  const ensureProfileExists = async (user: User) => {
+    try {
+      // Check if profile exists
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('user_id', user.id)
+        .maybeSingle();
+
+      if (profileError && profileError.code !== 'PGRST116') {
+        console.error('Error checking profile:', profileError);
+        return;
+      }
+
+      // If profile doesn't exist, create it
+      if (!profile) {
+        const fullName = user.user_metadata?.full_name || 
+                        user.user_metadata?.name || 
+                        user.email?.split('@')[0] || 
+                        'User';
+        
+        const { error: insertError } = await supabase
+          .from('profiles')
+          .insert({
+            user_id: user.id,
+            full_name: fullName,
+            email: user.email || '',
+            avatar_url: user.user_metadata?.avatar_url || user.user_metadata?.picture || null,
+          });
+
+        if (insertError) {
+          console.error('Error creating profile:', insertError);
+        }
+
+        // Ensure role exists (default to employee)
+        const { data: roleData, error: roleError } = await supabase
+          .from('user_roles')
+          .select('id')
+          .eq('user_id', user.id)
+          .maybeSingle();
+
+        if (!roleData && !roleError) {
+          await supabase
+            .from('user_roles')
+            .insert({
+              user_id: user.id,
+              role: 'employee',
+            });
+        }
+      }
+    } catch (error) {
+      console.error('Error ensuring profile exists:', error);
+    }
+  };
+
   const signOut = async () => {
     await supabase.auth.signOut();
     setUser(null);
@@ -106,16 +184,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, session, role, loading, signUp, signIn, signOut }}>
+    <AuthContext.Provider value={{ user, session, role, loading, signUp, signIn, signInWithGoogle, signOut }}>
       {children}
     </AuthContext.Provider>
   );
-}
-
-export function useAuth() {
-  const context = useContext(AuthContext);
-  if (context === undefined) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
-  return context;
 }

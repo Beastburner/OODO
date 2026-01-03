@@ -1,4 +1,4 @@
-import { useAuth } from '@/contexts/AuthContext';
+import { useAuth } from '@/hooks/useAuth';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import AdminDashboard from '@/components/dashboard/AdminDashboard';
 import EmployeeDashboard from '@/components/dashboard/EmployeeDashboard';
